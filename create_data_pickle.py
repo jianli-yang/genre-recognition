@@ -6,12 +6,13 @@ from pickle import dump
 import os
 from optparse import OptionParser
 
-TRACK_COUNT = 1000
+TRACK_COUNT = 8000
 
 def get_default_shape(dataset_path):
-    tmp_features, _ = load_track(os.path.join(dataset_path,
-        'blues/blues.00000.au'))
-    return tmp_features.shape
+    # tmp_features, _ = load_track(os.path.join(dataset_path,
+    #     'blues/blues.0000'), is_mel=True)
+    # return tmp_features.shape
+    return (934, 128)
 
 def collect_data(dataset_path):
     '''
@@ -25,22 +26,23 @@ def collect_data(dataset_path):
         the x and y matrices
     '''
     default_shape = get_default_shape(dataset_path)
+    print(default_shape)
     x = np.zeros((TRACK_COUNT,) + default_shape, dtype=np.float32)
     y = np.zeros((TRACK_COUNT, len(GENRES)), dtype=np.float32)
     track_paths = {}
 
     for (genre_index, genre_name) in enumerate(GENRES):
         for i in range(TRACK_COUNT // len(GENRES)):
-            file_name = '{}/{}.000{}.au'.format(genre_name,
-                    genre_name, str(i).zfill(2))
+            file_name = '{}/{}.{}'.format(genre_name,
+                    genre_name, str(i).zfill(4))
             print('Processing', file_name)
             path = os.path.join(dataset_path, file_name)
-            track_index = genre_index  * (TRACK_COUNT // len(GENRES)) + i
-            x[track_index], _ = load_track(path, default_shape)
+            track_index = genre_index * (TRACK_COUNT // len(GENRES)) + i
+            x[track_index], _ = load_track(path, default_shape, is_mel=True)
             y[track_index, genre_index] = 1
             track_paths[track_index] = os.path.abspath(path)
 
-    return (x, y, track_paths)
+    return x, y, track_paths
 
 if __name__ == '__main__':
     parser = OptionParser()

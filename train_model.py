@@ -1,4 +1,5 @@
-from common import GENRES
+# -*- coding: utf-8 -*
+from common import GENRES, load_track
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
@@ -18,6 +19,104 @@ FILTER_LENGTH = 5
 CONV_FILTER_COUNT = 256
 BATCH_SIZE = 32
 EPOCH_COUNT = 100
+
+
+def data_generator(data, targets, batch_size):
+    while True:
+      cnt = 0
+      xx = []
+      yy = []
+      for i in range(0, len(data)):
+
+          tmpx, _ = load_track(data[i], (934, 128), True)
+          tmpy = targets[i]
+
+          xx.append(tmpx)
+          yy.append(tmpy)
+          cnt += 1
+          if cnt >= batch_size:
+
+            ret = (np.array(xx).reshape([-1, 934, 128]), np.array(yy).reshape(-1, len(GENRES)))
+            cnt = 0
+            xx = []
+            yy = []
+            yield ret
+
+
+def train_big_model(data, model_path):
+
+    track_paths = data['track_paths']
+    y = data["y"]
+
+    indexs = [i for i in range(0, len(y))]
+    np.random.shuffle(indexs)
+
+    x_train = []
+    y_train = []
+    x_val = []
+    y_val = []
+
+    llen = int(len(y) * 0.8)
+    for i in range(0, len(indexs)):
+        if i < llen:
+            x_train.append(track_paths[indexs[i]])
+            y_train.append(y[indexs[i]])
+        else:
+            x_val.append(track_paths[indexs[i]])
+            y_val.append(y[indexs[i]])
+
+
+    print('Building model...')
+
+    #n_features = x_train.shape[2]
+    n_features = 128
+    input_shape = (None, n_features)
+    model_input = Input(input_shape, name='input')
+    layer = model_input
+    for i in range(N_LAYERS):
+        # second convolutional layer names are used by extract_filters.py
+        layer = Convolution1D(
+                filters=CONV_FILTER_COUNT,
+                kernel_size=FILTER_LENGTH,
+                name='convolution_' + str(i + 1)
+            )(layer)
+        layer = BatchNormalization(momentum=0.9)(layer)
+        layer = Activation('relu')(layer)
+        layer = MaxPooling1D(2)(layer)
+        layer = Dropout(0.5)(layer)
+
+    layer = TimeDistributed(Dense(len(GENRES)))(layer)
+    time_distributed_merge_layer = Lambda(
+            function=lambda x: K.mean(x, axis=1),
+            output_shape=lambda shape: (shape[0],) + shape[2:],
+            name='output_merged'
+        )
+    layer = time_distributed_merge_layer(layer)
+    layer = Activation('softmax', name='output_realtime')(layer)
+    model_output = layer
+    model = Model(model_input, model_output)
+    opt = Adam(lr=0.001)
+    model.compile(
+            loss='categorical_crossentropy',
+            optimizer=opt,
+            metrics=['accuracy']
+        )
+
+    print('Training...')
+    model.fit_generator(
+       generator=data_generator(x_train, y_train, BATCH_SIZE), epochs=EPOCH_COUNT, steps_per_epoch=200, validation_steps=50,
+        validation_data=data_generator(x_val, y_val, BATCH_SIZE), verbose=1, callbacks=[
+            ModelCheckpoint(
+                model_path, save_best_only=True, monitor='val_acc', verbose=1
+            ),
+            ReduceLROnPlateau(
+                monitor='val_acc', factor=0.5, patience=10, min_delta=0.01,
+                verbose=1
+            )
+        ]
+    )
+    return model
+
 
 def train_model(data, model_path):
     x = data['x']
@@ -76,6 +175,7 @@ def train_model(data, model_path):
 
     return model
 
+
 if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-d', '--data_path', dest='data_path',
@@ -88,7 +188,9 @@ if __name__ == '__main__':
             help='path to the output model HDF5 file', metavar='MODEL_PATH')
     options, args = parser.parse_args()
 
-    with open(options.data_path, 'rb') as f:
-        data = pickle.load(f)
-
-    train_model(data, options.model_path)
+    # with open(options.data_path, 'rb') as f:
+    #     data = pickle.load(f)
+    data = np.load(options.data_path)
+    data = data.tolist()
+    # train_model(data, options.model_path)
+    train_big_model(data, options.model_path)

@@ -27,7 +27,8 @@ def collect_data(dataset_path):
     '''
     default_shape = get_default_shape(dataset_path)
     print(default_shape)
-    x = np.zeros((TRACK_COUNT,) + default_shape, dtype=np.float32)
+    #x = np.zeros((TRACK_COUNT,) + default_shape, dtype=np.float32)
+    x = []
     y = np.zeros((TRACK_COUNT, len(GENRES)), dtype=np.float32)
     track_paths = {}
 
@@ -38,9 +39,11 @@ def collect_data(dataset_path):
             print('Processing', file_name)
             path = os.path.join(dataset_path, file_name)
             track_index = genre_index * (TRACK_COUNT // len(GENRES)) + i
-            x[track_index], _ = load_track(path, default_shape, is_mel=True)
+            # x[track_index], _ = load_track(path, default_shape, is_mel=True)
+            # x[track_index] = 0
             y[track_index, genre_index] = 1
             track_paths[track_index] = os.path.abspath(path)
+            #track_paths[track_index] = file_name
 
     return x, y, track_paths
 
@@ -57,5 +60,6 @@ if __name__ == '__main__':
     (x, y, track_paths) = collect_data(options.dataset_path)
 
     data = {'x': x, 'y': y, 'track_paths': track_paths}
-    with open(options.output_pkl_path, 'wb') as f:
-        dump(data, f)
+    # with open(options.output_pkl_path, 'wb') as f:
+    #     dump(data, f)
+    np.save(options.output_pkl_path, np.array(data))
